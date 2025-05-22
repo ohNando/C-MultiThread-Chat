@@ -20,10 +20,10 @@ SERVER_IP = 127.0.0.1
 all: build
 
 $(SERVER_OBJ): ./src/server/Server.c
-	gcc $(SERVER_INC) -o $(SERVER_OBJ) -c ./src/server/Server.c 
+	gcc -g $(SERVER_INC) -o $(SERVER_OBJ) -c ./src/server/Server.c 
 
 $(CLIENT_OBJ): ./src/client/Client.c 
-	gcc $(CLIENT_INC) -o $(CLIENT_OBJ) -c ./src/client/Client.c 
+	gcc -g $(CLIENT_INC) -o $(CLIENT_OBJ) -c ./src/client/Client.c 
 
 build: build-server build-client
 

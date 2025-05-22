@@ -59,29 +59,58 @@ void chat(const char* szMessage, int sender_sockfd){
     pthread_mutex_unlock(&clients_mutex);
 }
 
-void removeClient(int sockfd){
+void removeClient(int rem_sockfd) {
+    char leaveMsg[MAX_BUFSIZE] = {0}; 
+    struct sockaddr_in temp_addr;
+    char nameBuf[NAME_LEN] = {0};
+    int found = 0;
+
+    int cli_index_debug = -1;
+
     pthread_mutex_lock(&clients_mutex);
-    for(int i = 0; i < MAX_CLIENT; i++){
-        if(clients[i].active && clients[i].sockfd == sockfd){
+    for (int i = 0; i < MAX_CLIENT; i++) {
+        if (clients[i].active && clients[i].sockfd == rem_sockfd) {
+            cli_index_debug = i;
+            clients[i].active = 0;
+            strncpy(nameBuf, clients[i].name, NAME_LEN -1);
+            nameBuf[NAME_LEN - 1] = '\0';
+            temp_addr = clients[i].addr;
+
             clients[i].active = 0;
             close(clients[i].sockfd);
-            printf("(!)| Client %s (fd: %d,%s:%d) disconnected!\n",
-                clients[i].name,
-                clients[i].sockfd,
-                inet_ntoa(clients[i].addr.sin_addr),
-                ntohs(clients[i].addr.sin_port)
-            );
+            clients[i].sockfd = -1; 
+            memset(clients[i].name, 0, NAME_LEN);
 
-            char leaveMsg[MAX_BUFSIZE];
-            snprintf(leaveMsg, sizeof(leaveMsg), 
-                "SERVER: %s has left the chat.\n",clients[i].name);
-            pthread_mutex_unlock(&clients_mutex);
-            chat(leaveMsg,-1);
-            pthread_mutex_lock(&clients_mutex);
-            return;
+            found = 1;
+            break;
         }
     }
     pthread_mutex_unlock(&clients_mutex);
+
+
+    if (found) {
+        char ip_str[INET_ADDRSTRLEN];
+        strncpy(ip_str, inet_ntoa(temp_addr.sin_addr), INET_ADDRSTRLEN - 1);
+        ip_str[INET_ADDRSTRLEN - 1] = '\0';
+
+        printf("(!)| Client \'%s\' (slot: %d, original fd: %d) from %s:%d has been removed!\n",
+        (strlen(nameBuf) > 0 ? nameBuf : "[NoName]"),
+        cli_index_debug,
+        rem_sockfd,
+        ip_str,
+        ntohs(temp_addr.sin_port)
+        );
+
+        if(strlen(nameBuf) > 0){
+            char leaveMsg[MAX_BUFSIZE];
+            snprintf(leaveMsg, sizeof(leaveMsg),
+                     "SERVER: %s has left the chat.\n", nameBuf);
+            chat(leaveMsg, -1);
+        }
+    }else{
+        printf("[WARN] removeClient called for sockfd %d,but no active client found.\n"
+            , rem_sockfd);
+    }
 }
 
 void* handleClient(void* arg){
