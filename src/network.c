@@ -1,4 +1,4 @@
-#include "../include/network.h"
+#include "network.h"
 
 int connectToServer(const char* serverIP, int port){
     int new_sockfd;

@@ -1,4 +1,4 @@
-#include "../include/client.h"
+#include "client.h"
 
 void* receiveMsgHandler(void* arg){
     int cli_sockfd = *(int*)arg;

@@ -1,4 +1,4 @@
-#include "../include/utility.h"
+#include "utility.h"
 
 pthread_mutex_t stdoutMutex = PTHREAD_MUTEX_INITIALIZER;
 
