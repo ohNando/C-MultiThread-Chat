@@ -1,62 +1,26 @@
-#include "Server.h"
-
-void error(const char* szMsg){
-    perror(szMsg);
-    exit(1);
-}
-
-int initServer(int argc,char** argv){
-    if(argc < 2){
-        fprintf(stderr,"(-)| Port number not provided! Program terminated..\n");
-        exit(1);
-    }
-
-    int listen_sockfd;
-    int iPortNo = atoi(argv[1]);
-    struct sockaddr_in serv_addr;
-
-    for(int i = 0; i < MAX_CLIENT; i++){
-        clients[i].active = 0;
-    }
-
-    listen_sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if(listen_sockfd == -1) error("(-)| Socket creation failed!\n");
-    printf("(+)| Socket successfully created!\n");
-
-    memset(&serv_addr, 0, sizeof(serv_addr));
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    serv_addr.sin_port = htons(iPortNo);
-
-    int optval = 1;
-    setsockopt(listen_sockfd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
-
-    if(bind(listen_sockfd, (SA*) &serv_addr, sizeof(serv_addr)) != 0){
-        close(listen_sockfd);
-        error("(-)|Socket bind failed...\n");
-    }
-    printf("(+)| Socket successfully binded to port :%d...\n",iPortNo);
-
-
-    if(listen(listen_sockfd,MAX_CLIENT) != 0){
-        close(listen_sockfd);
-        error("(-)|Listen failed...\n");
-    }
-    printf("(+)| Server is listening on %d...\n",iPortNo);
-
-    return listen_sockfd;
-}
+#include "server.h"
 
 void chat(const char* szMessage, int sender_sockfd){
-    pthread_mutex_lock(&clients_mutex);
+    int sockets_to_remove[MAX_CLIENT];
+    int removel_count = 0;
+
+    LOCK(&clients_mutex);
     for(int i = 0; i < MAX_CLIENT; i++){
         if(clients[i].active && clients[i].sockfd != sender_sockfd){
             if (write(clients[i].sockfd, szMessage, strlen(szMessage)) < 0) {
-                perror("(-)| Error writing to chat socket");
+                if(clients[i].pending_removal == 0){
+                    clients[i].pending_removal = 1;
+                    sockets_to_remove[removel_count++] = clients[i].sockfd;
+                    printf("(-)| Error writing to chat socket. Marking for removal.\n", clients[i].sockfd);
+                }
             }
         }
     }
-    pthread_mutex_unlock(&clients_mutex);
+    UNLOCK(&clients_mutex);
+
+    for(int i = 0; i < removel_count; i++){
+        removeClient(sockets_to_remove[i]);
+    }
 }
 
 void removeClient(int rem_sockfd) {
@@ -64,28 +28,29 @@ void removeClient(int rem_sockfd) {
     struct sockaddr_in temp_addr;
     char nameBuf[NAME_LEN] = {0};
     int found = 0;
-
     int cli_index_debug = -1;
 
-    pthread_mutex_lock(&clients_mutex);
+    LOCK(&clients_mutex);
     for (int i = 0; i < MAX_CLIENT; i++) {
         if (clients[i].active && clients[i].sockfd == rem_sockfd) {
             cli_index_debug = i;
-            clients[i].active = 0;
-            strncpy(nameBuf, clients[i].name, NAME_LEN -1);
+
+            strncpy(nameBuf, clients[i].name, NAME_LEN -1); //Copy message 
             nameBuf[NAME_LEN - 1] = '\0';
             temp_addr = clients[i].addr;
 
-            clients[i].active = 0;
-            close(clients[i].sockfd);
-            clients[i].sockfd = -1; 
+            clients[i].active = 0; //Deactivate client
+            close(clients[i].sockfd); //Close socket
+
+            clients[i].sockfd = -1; //Reset sockfd
+            clients[i].pending_removal = 0;
             memset(clients[i].name, 0, NAME_LEN);
 
             found = 1;
             break;
         }
     }
-    pthread_mutex_unlock(&clients_mutex);
+    UNLOCK(&clients_mutex);
 
 
     if (found) {
@@ -94,11 +59,11 @@ void removeClient(int rem_sockfd) {
         ip_str[INET_ADDRSTRLEN - 1] = '\0';
 
         printf("(!)| Client \'%s\' (slot: %d, original fd: %d) from %s:%d has been removed!\n",
-        (strlen(nameBuf) > 0 ? nameBuf : "[NoName]"),
-        cli_index_debug,
-        rem_sockfd,
-        ip_str,
-        ntohs(temp_addr.sin_port)
+            (strlen(nameBuf) > 0 ? nameBuf : "[NoName]"),
+            cli_index_debug,
+            rem_sockfd,
+            ip_str,
+            ntohs(temp_addr.sin_port)
         );
 
         if(strlen(nameBuf) > 0){
@@ -119,6 +84,7 @@ void* handleClient(void* arg){
     char clientName[NAME_LEN];
     char buffer[MAX_BUFSIZE];
     int n;
+    memset(clientName, 0, NAME_LEN);
 
     const char* nameMsg = "SERVER: Welcome! Please enter your name: ";
     if(write(client_sockfd, nameMsg, strlen(nameMsg)) < 0){
@@ -136,8 +102,15 @@ void* handleClient(void* arg){
     }
 
     clientName[strcspn(clientName, "\r\n")] = 0;
+    while(strlen(clientName) > 0 && (clientName[strlen(clientName)-1] == ' ' ||
+     clientName[strlen(clientName) - 1] < 32)){
+        clientName[strlen(clientName) - 1] = '\0';
+    }
+
+    LOCK(&clients_mutex);
     strncpy(pClient->name, clientName, NAME_LEN - 1);
     pClient->name[NAME_LEN - 1] = '\0';
+    UNLOCK(&clients_mutex);
 
     printf("(+)| %s (fd: %d) connected from %s:%d.\n",
         pClient->name,client_sockfd,
@@ -175,7 +148,7 @@ void* handleClient(void* arg){
             pClient->name,
             buffer
         );
-        printf("Sending = %s\n", message);
+        printf("%s", message);
         chat(message,client_sockfd);
     }
     pthread_exit(NULL);
@@ -198,17 +171,18 @@ void startServerLoop(int listen_sockfd){
         }
 
         int i;
-        pthread_mutex_lock(&clients_mutex);
+        LOCK(&clients_mutex);
         for(i = 0; i < MAX_CLIENT; i++){
             if(!clients[i].active){
                 clients[i].sockfd = newConnSockfd;
                 clients[i].addr = cli_addr;
                 clients[i].active = 1;
+                clients[i].pending_removal = 0;
                 memset(clients[i].name, 0, NAME_LEN);
                 break;
             }
         }
-        pthread_mutex_unlock(&clients_mutex);
+        UNLOCK(&clients_mutex);
 
         if(i == MAX_CLIENT){
             printf("(-)| Max clients reached. Connection rejected for: %s:%d.\n",
@@ -232,7 +206,13 @@ void startServerLoop(int listen_sockfd){
 }
 
 int main(int argc,char** argv){
-    int listen_sockfd = initServer(argc,argv);
+    if(argc < 2){
+        fprintf(stderr, "(-)| Port number not provided! Program terminated..\n");
+        exit(1);
+    }
+    int port = atoi(argv[1]);
+    int listen_sockfd = start_listening(port);
+    
     startServerLoop(listen_sockfd);
     close(listen_sockfd);
     pthread_mutex_destroy(&clients_mutex);

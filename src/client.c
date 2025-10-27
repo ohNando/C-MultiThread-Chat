@@ -1,27 +1,9 @@
-#include "Client.h"
-
-void error(const char* szMsg){
-    perror(szMsg);
-    exit(1); // EXIT_FAILURE
-}
-
-void printToConsole(const char* szMsg, int showPrompt){
-    LOCK(&stdoutMutex);
-    printf("\r\033[K");
-
-    if(szMsg) printf("%s", szMsg);
-    if(showPrompt) printf("%s",PROMPT);
-
-    fflush(stdout);
-    UNLOCK(&stdoutMutex);
-}
+#include "../include/client.h"
 
 void* receiveMsgHandler(void* arg){
     int cli_sockfd = *(int*)arg;
     char message[MAX_BUFSIZE];
     ssize_t bytes_recv;
-    
-    printf("[DEBUG] : Receive thread started. (sockfd %d).\n",cli_sockfd);
 
     while(1){
         memset(message,0,MAX_BUFSIZE - 1);
@@ -50,8 +32,6 @@ void* sendMsgHandler(void* arg){
     int cli_sockfd = *(int*)arg;
     char buffer[MAX_BUFSIZE];
     ssize_t bytes_written;
-
-    printf("[DEBUG] : Send thread started. (sockfd %d).\n",cli_sockfd);
 
     while(1){
         LOCK(&stdoutMutex);
@@ -92,37 +72,18 @@ void* sendMsgHandler(void* arg){
 
 int initClient(const char* serverIP, int port){
     int new_sockfd;
-    struct sockaddr_in serv_addr;
     char nameBuffer[NAME_LEN];
     char serverPrompt[MAX_BUFSIZE];
     ssize_t n;
 
-    new_sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if(new_sockfd < 0){
-        perror("(-)| Error opening socket!\n");
+    new_sockfd = connectToServer(serverIP, port);
+    if(new_sockfd < 0)
         return -1;
-    }
 
-    memset(&serv_addr,0,sizeof(serv_addr));
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_port = htons(port);
-    if(inet_pton(AF_INET, serverIP, &serv_addr.sin_addr) <= 0){
-        fprintf(stderr, "Invalid address | address not supported..\n");
-        close(new_sockfd);
-        return -1;
-    }
-
-    if(connect(new_sockfd, (SA*)&serv_addr, sizeof(serv_addr)) < 0){
-        perror("(-)| Error connecting to server..\n");
-        close(new_sockfd);
-        return -1;
-    }
-    printf("(+)| Connected to server %s:%d\n",serverIP,port);
-
-    memset(serverPrompt, 0, sizeof(serverPrompt));
+    memset(serverPrompt, 0, sizeof(serverPrompt));    
     n = read(new_sockfd, serverPrompt, MAX_BUFSIZE - 1);
     if (n <= 0) {
-        if (n == 0) printf("(!)| Server closed connection before name prompt.\n");
+        if(n == 0) printf("(!)| Server closed connection before name prompt.\n");
         else perror("(-)| Error reading name prompt from server");
         close(new_sockfd);
         return -1;
@@ -139,6 +100,7 @@ int initClient(const char* serverIP, int port){
         close(new_sockfd);
         return -1;
     }
+    nameBuffer[strcspn(nameBuffer, "\r\n")] = 0; //Removing newline character
 
     if (write(new_sockfd, nameBuffer, strlen(nameBuffer)) < 0) {
         perror("(-)| Error writing name to socket");
@@ -146,7 +108,6 @@ int initClient(const char* serverIP, int port){
         return -1;
     }
 
-    printf("(+)| Name sent. You can chat now ,have fun!\n");
     return new_sockfd;
 }
 
@@ -173,16 +134,12 @@ void startClientLoop(int loop_sockfd){
         return;
     }
 
-    printf("(+)| Threads created! Waiting for them joining...\n");
-
     if(sendTid && pthread_join(sendTid, NULL) != 0)
         perror("(-)| Error joining send thread!\n");
     
     if (recvTid && pthread_join(recvTid, NULL) != 0) {
         perror("(-)| Error joining receive thread!\n");
     }
-
-    printf("(+)| Main: Both threads have joined!\n");
 }
 
 int main(int argc, char** argv){

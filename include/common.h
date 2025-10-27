@@ -1,5 +1,5 @@
-#ifndef CLIENT_H
-#define CLIENT_H
+#ifndef COMMON_H
+#define COMMON_H
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,19 +16,13 @@
 #define MAX_BUFSIZE 1024
 #define NAME_LEN 32
 #define SA struct sockaddr
+#define PROMPT "> "
+
+#define MAX_CLIENT 10
 
 #define UNLOCK pthread_mutex_unlock
 #define LOCK pthread_mutex_lock
 
-#define PROMPT "> "
-pthread_mutex_t stdoutMutex = PTHREAD_MUTEX_INITIALIZER;
-
-void error(const char*);
-void printToConsole(const char*,int);
-
-void* receiveMsgHandler(void*);
-void* sendMsgHandler(void*);
-int initClient(const char*,int);
-void startClientLoop(int);
+extern pthread_mutex_t stdoutMutex;
 
 #endif
