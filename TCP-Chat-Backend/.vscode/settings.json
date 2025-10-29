@@ -3,6 +3,7 @@
         "common.h": "c",
         "utility.h": "c",
         "network.h": "c",
-        "libwebsockets.h": "c"
+        "libwebsockets.h": "c",
+        "gui_bridge.h": "c"
     }
 }

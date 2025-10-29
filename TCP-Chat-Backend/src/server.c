@@ -18,6 +18,10 @@ void chat(const char* szMessage, int sender_sockfd){
     }
     UNLOCK(&clients_mutex);
 
+    if(send_message_to_gui(szMessage) < 0){
+        printf("(W)| Failed to sending message to GUI bridge.\n");
+    }
+
     for(int i = 0; i < removel_count; i++){
         removeClient(sockets_to_remove[i]);
     }
@@ -205,6 +209,31 @@ void startServerLoop(int listen_sockfd){
     }
 }
 
+void* handleGuiIncoming(void* arg){
+    //BURADA KALDIN BRIDGE ARASI KUYRUK MESAJ ATAMASI YAPICAKSIN!!
+    char gui_message[MAX_BUFSIZE];
+
+    while(1){
+        if(dequeue(&queue_from_gui, gui_message, MAX_BUFSIZE) == 0){
+            printf("(I)| Message from GUI: %s\n", gui_message);
+
+            if(strncmp(gui_message, "/exit", 5) == 0){
+                printf("(I)| Server shutdown via /exit command.\n");
+                //For now just logging
+            }else if(strncmp(gui_message, "/chat", 6) == 0){
+                const char* chat_context = gui_message + 6;
+
+                char broadcast_msg[MAX_BUFSIZE];
+                snprintf(broadcast_msg, sizeof(broadcast_msg),
+                 "User: %s\n", chat_context);
+                chat(broadcast_msg, -1);
+            }
+            //... other commands
+        }
+    }
+    pthread_exit(NULL);
+}
+
 int main(int argc,char** argv){
     if(argc < 2){
         fprintf(stderr, "(-)| Port number not provided! Program terminated..\n");
@@ -212,8 +241,24 @@ int main(int argc,char** argv){
     }
     int port = atoi(argv[1]);
     int listen_sockfd = start_listening(port);
-    
+    pthread_t ws_tid, gui_in_tid; //ws server thread
+
+    if(pthread_create(&ws_tid, NULL, &start_websocket_server, NULL) != 0){
+        fprintf(stderr, "(E)| Failed to create WebSocket server thread!\n");
+        close(listen_sockfd);
+        pthread_mutex_destroy(&clients_mutex);
+        return 1;
+    }
+
+    if(pthread_create(&gui_in_tid, NULL, &handleGuiIncoming, NULL) != 0){
+        fprintf(stderr, "(E)| Failed to create GUI incoming handler thread!\n");
+        close(listen_sockfd);
+        pthread_mutex_destroy(&clients_mutex);
+        return 1;
+    }
+
     startServerLoop(listen_sockfd);
+    pthread_join(ws_tid, NULL); // wait for ws server thread to finish
     close(listen_sockfd);
     pthread_mutex_destroy(&clients_mutex);
     printf("(-)| Server determinated!\n");

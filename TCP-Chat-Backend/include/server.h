@@ -4,6 +4,7 @@
 #include "common.h"
 #include "utility.h"
 #include "network.h"
+#include "gui_bridge.h"
 
 typedef struct{
     int sockfd;
@@ -22,5 +23,7 @@ void startServerLoop(int);
 void chat(const char* , int);
 void removeClient(int);
 void* handleClient(void*);
+
+void* handleGuiIncoming(void*);
 
 #endif 
