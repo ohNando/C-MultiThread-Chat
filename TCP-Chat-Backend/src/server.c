@@ -210,7 +210,6 @@ void startServerLoop(int listen_sockfd){
 }
 
 void* handleGuiIncoming(void* arg){
-    //BURADA KALDIN BRIDGE ARASI KUYRUK MESAJ ATAMASI YAPICAKSIN!!
     char gui_message[MAX_BUFSIZE];
 
     while(1){
@@ -243,6 +242,9 @@ int main(int argc,char** argv){
     int listen_sockfd = start_listening(port);
     pthread_t ws_tid, gui_in_tid; //ws server thread
 
+    init_queue(&queue_to_gui);
+    init_queue(&queue_from_gui);
+    
     if(pthread_create(&ws_tid, NULL, &start_websocket_server, NULL) != 0){
         fprintf(stderr, "(E)| Failed to create WebSocket server thread!\n");
         close(listen_sockfd);

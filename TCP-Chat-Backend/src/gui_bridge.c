@@ -7,14 +7,23 @@ static struct lws_context* websocket_context = NULL;
 static struct lws* gui_wsi = NULL;
 pthread_mutex_t websocket_client_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+static struct lws_protocols protocols[] = {
+    {
+        .name = PROTOCOL_NAME,
+        .callback = callback_chat,
+        .per_session_data_size = 0,
+        .rx_buffer_size = 0,
+    },
+    { NULL, NULL, 0, 0 } // terminator
+};
+
 int callback_chat(struct lws* wsi, enum lws_callback_reasons reason,
                          void* user, void* in, size_t len) {
     char incoming_messsage[MAX_BUFSIZE];
 
     switch (reason){
         case LWS_CALLBACK_ESTABLISHED:
-            init_queue(&queue_to_gui);
-            init_queue(&queue_from_gui);
+            printf("(WS)| Connection established - TEST. Pointer: %p\n", (void*)wsi);
 
             LOCK(&websocket_client_mutex);
             gui_wsi = wsi;
@@ -22,6 +31,8 @@ int callback_chat(struct lws* wsi, enum lws_callback_reasons reason,
             printf("(+)| WebSocket connection established. WSI: %p\n", (void*)gui_wsi);
             break;
         case LWS_CALLBACK_RECEIVE:
+            printf("(WS)| Received data - TEST\n");
+            
             if(len >= MAX_BUFSIZE) break;
             strncpy(incoming_messsage, (const char*)in, len);
             incoming_messsage[len] = '\0';
@@ -31,14 +42,16 @@ int callback_chat(struct lws* wsi, enum lws_callback_reasons reason,
             }
             break;
         case LWS_CALLBACK_CLOSED:
+            printf("(WS)| Connection closed - TEST\n");
+
             LOCK(&websocket_client_mutex);
             if(gui_wsi == wsi){
-                gui_wsi = NULL;
-                printf("(WS)| WebSocket connection closed. WSI: %p\n", (void*)wsi);
+                 gui_wsi = NULL;
+                 printf("(WS)| WebSocket connection closed. WSI: %p\n", (void*)wsi);
             }
             UNLOCK(&websocket_client_mutex);
             break;
-        case LWS_CALLBACK_SERVER_WRITEABLE: //
+        case LWS_CALLBACK_SERVER_WRITEABLE: //If its writable, send messages from queue
             if(gui_wsi){
                 char message_to_send[MAX_BUFSIZE];
 
@@ -83,7 +96,7 @@ void* start_websocket_server(void* arg){
         .port = WS_PORT,
         .iface = NULL,
         .protocols = protocols,
-        .options = LWS_SERVER_OPTION_VALIDATE_UTF8 || LWS_SERVER_OPTION_DO_SSL_GLOBAL_INIT,
+        .options = LWS_SERVER_OPTION_VALIDATE_UTF8 | LWS_SERVER_OPTION_DO_SSL_GLOBAL_INIT,
         .gid = -1,
         .uid = -1,
         .max_http_header_data = 1024
@@ -107,4 +120,4 @@ void* start_websocket_server(void* arg){
     printf("(W)| WebSocket server terminated.\n");
 
     return NULL;
-}
+}   

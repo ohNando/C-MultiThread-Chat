@@ -18,14 +18,5 @@ int send_message_to_gui(const char*);
 int callback_chat(struct lws*, enum lws_callback_reasons,
                          void*, void*, size_t);
 
-static struct lws_protocols protocols[] = {
-    {
-        .name = PROTOCOL_NAME,
-        .callback = callback_chat,
-        .per_session_data_size = 0,
-        .rx_buffer_size = 0,
-    },
-    { NULL, NULL, 0, 0 } // terminator
-};
 
 #endif

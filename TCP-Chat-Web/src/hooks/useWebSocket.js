@@ -1,49 +1,70 @@
 import { useState, useEffect } from 'react';
 
-const WS_URL = 'ws://localhost:8081';
+// C backend'inizin adresi
+const WS_URL = 'ws://localhost:8081'; 
+const WS_PROTOCOL = 'tcp-chat-protocol';
 
 export const useWebSocket = () => {
-    const [messages, seMessages] = useState([]);
+    // State tanımlamaları
+    const [messages, setMessages] = useState([]);
     const [ws, setWs] = useState(null);
     const [isConnected, setIsConnected] = useState(false);
 
     useEffect(() => {
-        const socket = new WebSocket(WS_URL);
+        // LOG 1: Hook'un tetiklendiğini kontrol et
+        console.log('WS [DEBUG]: useEffect tetiklendi. Bağlantı kuruluyor...');
+
+        // WebSocket nesnesini oluştur
+        const socket = new WebSocket(WS_URL, WS_PROTOCOL);
         setWs(socket);
+        
+        // LOG 2: Socket nesnesinin durumunu kontrol et
+        console.log('WS [DEBUG]: WebSocket nesnesi oluşturuldu:', socket);
+
+        // --- Olay Dinleyicileri (Event Listeners) ---
 
         socket.onopen = () => {
-            console.log('WebSocket connected to C backend on 8081');
+            // LOG 3: Bağlantı BAŞARILI
+            console.log('WS [DEBUG]: Bağlantı başarılı (onopen). State güncelleniyor.');
             setIsConnected(true);
         };
 
         socket.onmessage = (event) => {
-            console.log('Message received from C backend:', event.data);
-            setMessages(prev => [...prev, event.data]);
+            // LOG 4: Mesaj GELDİ
+            console.log('WS [DEBUG]: Mesaj alındı:', event.data);
+            setMessages(prev => [...prev, String(event.data)]);
         };
 
-        socket.onclose = () => {
-            console.log('WebSocket disconnected from C backend');
+        socket.onclose = (event) => {
+            // LOG 5: Bağlantı KAPANDI
+            console.log(`WS [DEBUG]: Bağlantı kapandı. Kod: ${event.code}, Sebep: ${event.reason}`);
             setIsConnected(false);
         };
 
         socket.onerror = (error) => {
-            console.error('WebSocket error:', error);
-            setMessages(prev => [...prev, 'Server: Connection Error']);
+            // LOG 6: HATA oluştu
+            console.error('WS [DEBUG]: Kritik WebSocket Hatası:', error);
         };
 
+        // Temizlik fonksiyonu
         return () => {
-            socket.close();
+            console.log('WS [DEBUG]: useEffect temizleniyor. Socket kapatılıyor.');
+            if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
+                 socket.close(1000, 'Component unmount');
+            }
         };
-    }, []);
+    }, []); // Sadece bir kez çalışır
 
-    const sendMessage = (message) => {
+    // Mesaj gönderme fonksiyonu (Kullanıcı adı yönetimi dahil)
+    const sendMessage = (username, message) => {
         if(ws && isConnected) {
-            const formattedMessage = `/chat: ${message}`;
+            // C Backend için format: /chat [KullanıcıAdı]: Mesaj
+            const formattedMessage = `/chat [${username}]: ${message}`; 
             ws.send(formattedMessage);
         }else{
-            console.warn('WebSocket is not connected. Cannot send message.');
+            console.warn('WS [DEBUG]: Mesaj gönderilemedi. Bağlantı yok veya socket hazır değil.');
         }
     };
 
-    return { messages,  isConnected, sendMessage };
+    return { messages, isConnected, sendMessage };
 };
