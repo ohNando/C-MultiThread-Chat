@@ -219,12 +219,11 @@ void* handleGuiIncoming(void* arg){
             if(strncmp(gui_message, "/exit", 5) == 0){
                 printf("(I)| Server shutdown via /exit command.\n");
                 //For now just logging
-            }else if(strncmp(gui_message, "/chat", 6) == 0){
+            }else if(strncmp(gui_message, "/chat ", 6) == 0){
                 const char* chat_context = gui_message + 6;
 
                 char broadcast_msg[MAX_BUFSIZE];
-                snprintf(broadcast_msg, sizeof(broadcast_msg),
-                 "User: %s\n", chat_context);
+                snprintf(broadcast_msg, sizeof(broadcast_msg), "%s\n", chat_context);
                 chat(broadcast_msg, -1);
             }
             //... other commands

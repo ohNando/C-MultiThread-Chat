@@ -1,94 +1,117 @@
-// tcp-chat-gui/src/App.jsx
+// src/App.jsx
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useWebSocket } from './hooks/useWebSocket'; 
-import './App.css'; 
+import './App.css';
 
 const App = () => { 
-    // State'ler
     const [username, setUsername] = useState(''); 
-    const { messages, isConnected, sendMessage } = useWebSocket();
+    const { messages, isConnected, sendMessage, setMessages } = useWebSocket();
     const [input, setInput] = useState('');
+    
+    const messagesEndRef = useRef(null);
+
+    useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, [messages]);
 
     const handleSend = (e) => { 
         e.preventDefault(); 
-        if (input.trim() && isConnected) {
-            // Mesajı, kullanıcı adıyla birlikte gönder
-            sendMessage(username, input.trim()); 
+        const trimmedInput = input.trim();
+        if (trimmedInput && isConnected) {
+            sendMessage(username, trimmedInput); 
+            const localMsg = `[${username}]: ${trimmedInput}`;
+            setMessages(prev => [...prev, localMsg]);
             setInput('');
         }
     };
     
-    // Kullanıcı Adı Giriş Ekranı
+    const parseMessage = (msg) => {
+        const serverMatch = msg.match(/^SERVER: (.*)/);
+        if (serverMatch) {
+            return { type: 'server', sender: 'Server', content: serverMatch[1] };
+        }
+
+        const chatMatch = msg.match(/^\[(.*?)\]: (.*)/);
+        if (chatMatch) {
+            const sender = chatMatch[1];
+            const content = chatMatch[2];
+            const type = (sender === username) ? 'own' : 'other';
+            return { type, sender, content };
+        }
+        
+        return { type: 'other', sender: 'Unknown', content: msg }; 
+    };
+
+    
     if (!username) {
         return (
-            <div className="login-screen" style={{ padding: '50px', textAlign: 'center', height: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', backgroundColor: '#f0f2f5' }}>
+            <div className="login-screen">
                 <h2>TCP Chat Köprüsü</h2>
-                <p style={{ color: isConnected ? 'green' : 'red', fontWeight: 'bold' }}>
-                    Durum: {isConnected ? 'Bağlı' : 'Backend Bekleniyor...'}
+                <p className={`status ${isConnected ? 'status-connected' : 'status-disconnected'}`}>
+                    Durum: {isConnected ? 'Connected (Port 8081)' : 'Waiting for backend ...'}
                 </p>
                 <input
                     type="text"
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
-                    placeholder="Kullanıcı Adınızı Girin"
-                    style={{ margin: '15px auto', padding: '12px', width: '80%', maxWidth: '300px', border: '1px solid #ccc', borderRadius: '5px' }}
+                    placeholder="Enter your username"
+                    onKeyDown={(e) => { if (e.key === 'Enter' && input.trim()) setUsername(input.trim()); }}
                 />
-                <button onClick={() => { if (input.trim()) setUsername(input.trim()); setInput(''); }}
-                        disabled={!input.trim()}
-                        style={{ padding: '12px 25px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>
+                <button onClick={() => { if (input.trim()) setUsername(input.trim()); }}
+                        disabled={!input.trim() || !isConnected}>
                     Sohbete Başla
                 </button>
             </div>
         );
     }
 
-    // Sohbet Arayüzü
     return (
-        <div className="chat-container" style={{ display: 'flex', flexDirection: 'column', height: '100vh', padding: '10px', boxSizing: 'border-box' }}>
-            <header style={{ padding: '10px', borderBottom: '2px solid #007bff', backgroundColor: '#e9f7ff' }}>
+        <div className="chat-container">
+            <header className="header">
                 <h1>TCP Chat Köprüsü</h1>
-                <p style={{ color: isConnected ? 'green' : 'red', fontWeight: 'bold', fontSize: '14px' }}>
-                    Bağlı Kullanıcı: {username} | Durum: {isConnected ? 'Çevrimiçi' : 'Bağlantı Yok'}
+                <p className={`status ${isConnected ? 'status-connected' : 'status-disconnected'}`}>
+                    Kullanıcı: {username} | Durum: {isConnected ? 'Online' : 'Offline'}
                 </p>
             </header>
             
-            {/* Mesaj Görüntüleme Alanı */}
-            <div className="messages-box" style={{ overflowY: 'auto', flexGrow: 1, padding: '10px', border: '1px solid #ccc', marginBottom: '10px', backgroundColor: '#fff' }}>
+            <div className="messages-box">
                 {messages.map((msg, index) => {
-                    const isOwnMessage = msg.startsWith(`[${username}]`);
+                    const parsed = parseMessage(msg.trim());
+
+                    if (parsed.type === 'server') {
+                        return (
+                            <div key={index} className="message server">
+                                {parsed.content}
+                            </div>
+                        );
+                    }
+
                     return (
-                        <p key={index} style={{ margin: '8px 0', textAlign: isOwnMessage ? 'right' : 'left', wordWrap: 'break-word', padding: '5px' }}>
-                            <span style={{ 
-                                backgroundColor: isOwnMessage ? '#dcf8c6' : '#fff', 
-                                padding: '8px 12px', 
-                                borderRadius: '15px', 
-                                display: 'inline-block',
-                                border: '1px solid #eee'
-                            }}>
-                                {msg.trim()}
-                            </span>
-                        </p>
+                        <div key={index} className={`message ${parsed.type}`}>
+                            <div className="message-sender">{parsed.type === 'other' ? parsed.sender : ''}</div>
+                            <div className="message-content">
+                                {parsed.content}
+                            </div>
+                        </div>
                     );
                 })}
+                {}
+                <div ref={messagesEndRef} />
             </div>
 
-            {/* Mesaj Gönderme Formu */}
-            <form onSubmit={handleSend} style={{ display: 'flex' }}>
+            <form onSubmit={handleSend} className="input-form">
                 <input
                     type="text"
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
-                    placeholder="Mesajınızı yazın..."
+                    placeholder="Enter your message..."
                     disabled={!isConnected}
-                    style={{ flexGrow: 1, padding: '10px', border: '1px solid #007bff', borderRadius: '5px 0 0 5px' }}
                 />
                 <button 
                     type="submit" 
-                    disabled={!isConnected || !input.trim()} 
-                    style={{ padding: '10px 15px', backgroundColor: '#007bff', color: 'white', border: 'none', cursor: 'pointer', borderRadius: '0 5px 5px 0', fontWeight: 'bold' }}
-                >
-                    Gönder
+                    disabled={!isConnected || !input.trim()}>
+                    Send
                 </button>
             </form>
         </div>

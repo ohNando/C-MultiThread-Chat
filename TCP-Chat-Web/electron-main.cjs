@@ -3,7 +3,7 @@ const path = require('path');
 
 const VITE_DEV_SERVER_URL = 'http://localhost:5173'; 
 
-function createWindow() {
+function createWindow() {   
     const mainWindow = new BrowserWindow({
         width: 1000, 
         height: 700,
